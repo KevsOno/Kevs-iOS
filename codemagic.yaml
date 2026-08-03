@@ -4,23 +4,38 @@ workflows:
     max_build_duration: 30
     environment:
       xcode: latest
-      vars:
-        XC_WORKSPACE: "Penafort Supermarket"
     scripts:
       - name: List directory contents
         script: |
           echo "=== Current directory ==="
           pwd
           ls -la
-          echo "=== Workspace files ==="
+          echo "=== All workspaces ==="
           find . -name "*.xcworkspace" -maxdepth 3
-          echo "=== Project files ==="
+          echo "=== All projects ==="
           find . -name "*.xcodeproj" -maxdepth 3
-      - name: Build IPA file
+      - name: Build IPA
         script: |
+          # Find the workspace
+          WORKSPACE_PATH=$(find . -name "*.xcworkspace" -maxdepth 3 | head -1)
+          if [ -z "$WORKSPACE_PATH" ]; then
+            echo "❌ No .xcworkspace found!"
+            exit 1
+          fi
+          echo "✅ Found workspace: $WORKSPACE_PATH"
+          # Extract the scheme from the workspace
+          SCHEME=$(xcodebuild -list -workspace "$WORKSPACE_PATH" 2>/dev/null | grep -A 1 "Schemes:" | tail -1 | sed 's/^[[:space:]]*//')
+          if [ -z "$SCHEME" ]; then
+            # Fallback: use workspace name (remove .xcworkspace)
+            SCHEME=$(basename "$WORKSPACE_PATH" .xcworkspace)
+            echo "⚠️ No scheme found, using workspace name: $SCHEME"
+          else
+            echo "✅ Found scheme: $SCHEME"
+          fi
+          # Build the IPA
           xcode-project build-ipa \
-            --workspace "$XC_WORKSPACE.xcworkspace" \
-            --scheme "$XC_WORKSPACE"
+            --workspace "$WORKSPACE_PATH" \
+            --scheme "$SCHEME"
     artifacts:
       - build/ios/ipa/*.ipa
     publishing:
