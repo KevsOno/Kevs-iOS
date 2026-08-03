@@ -1,85 +1,58 @@
 workflows:
   ios-workflow:
-    name: Build iOS IPA
+    name: Build iOS Unsigned IPA
     max_build_duration: 30
+    instance_type: mac_mini_m2
     environment:
       xcode: latest
-      cocoapods: default
     scripts:
       - name: List directory contents
         script: |
-          echo "=== Current directory ==="
-          pwd
-          ls -la
           echo "=== Workspace files ==="
           find . -name "*.xcworkspace" -maxdepth 3
           echo "=== Project files ==="
           find . -name "*.xcodeproj" -maxdepth 3
-      - name: Prepare Podfile and install
-        script: |
-          if [ ! -f "Podfile" ]; then
-            echo 'platform :ios, "14.0"' > Podfile
-            echo 'target "Penafort Supermarket" do' >> Podfile
-            echo "end" >> Podfile
-          fi
-          pod install --verbose
-      - name: Remove problematic capabilities from project
-        script: |
-          PROJECT_FILE="Penafort Supermarket.xcodeproj/project.pbxproj"
-          if [ -f "$PROJECT_FILE" ]; then
-            echo "🛠️  Patching $PROJECT_FILE to remove capabilities..."
-            # Remove references to push notifications and associated domains
-            sed -i '' '/com.apple.developer.associated-domains/d' "$PROJECT_FILE"
-            sed -i '' '/aps-environment/d' "$PROJECT_FILE"
-            # Remove the CODE_SIGN_ENTITLEMENTS reference entirely
-            sed -i '' '/CODE_SIGN_ENTITLEMENTS/d' "$PROJECT_FILE"
-            # Also remove any capability setting that might be present
-            sed -i '' '/ENABLE_PUSH_NOTIFICATIONS/d' "$PROJECT_FILE"
-            sed -i '' '/ENABLE_ASSOCIATED_DOMAINS/d' "$PROJECT_FILE"
-            echo "✅ Capabilities removed."
-          else
-            echo "❌ Project file not found!"
-          fi
-      - name: Build IPA with xcodebuild
+
+      - name: Build Archive without code signing
         script: |
           WORKSPACE_PATH=$(find . -name "*.xcworkspace" -maxdepth 3 | head -1)
-          if [ -z "$WORKSPACE_PATH" ]; then
-            echo "❌ No .xcworkspace found!"
-            exit 1
+          PROJECT_PATH=$(find . -name "*.xcodeproj" -maxdepth 3 | head -1)
+
+          if [ -n "$WORKSPACE_PATH" ]; then
+            BUILD_FLAG="-workspace $WORKSPACE_PATH"
+            SCHEME=$(xcodebuild -list -workspace "$WORKSPACE_PATH" 2>/dev/null | grep -A 1 "Schemes:" | tail -1 | sed 's/^[[:space:]]*//')
+          else
+            BUILD_FLAG="-project $PROJECT_PATH"
+            SCHEME=$(xcodebuild -list -project "$PROJECT_PATH" 2>/dev/null | grep -A 1 "Schemes:" | tail -1 | sed 's/^[[:space:]]*//')
           fi
-          echo "✅ Found workspace: $WORKSPACE_PATH"
-          SCHEME=$(xcodebuild -list -workspace "$WORKSPACE_PATH" 2>/dev/null | grep -A 1 "Schemes:" | tail -1 | sed 's/^[[:space:]]*//')
+
           if [ -z "$SCHEME" ]; then
-            SCHEME=$(basename "$WORKSPACE_PATH" .xcworkspace)
+            SCHEME="Penafort Supermarket"
           fi
-          echo "✅ Found scheme: $SCHEME"
-          # Create a minimal export plist
-          echo '<?xml version="1.0" encoding="UTF-8"?>' > export_options.plist
-          echo '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' >> export_options.plist
-          echo '<plist version="1.0">' >> export_options.plist
-          echo '<dict>' >> export_options.plist
-          echo '    <key>method</key>' >> export_options.plist
-          echo '    <string>development</string>' >> export_options.plist
-          echo '    <key>signingStyle</key>' >> export_options.plist
-          echo '    <string>automatic</string>' >> export_options.plist
-          echo '</dict>' >> export_options.plist
-          echo '</plist>' >> export_options.plist
-          # Build the archive (use automatic signing, skip code signing if necessary)
-          xcodebuild -workspace "$WORKSPACE_PATH" \
+
+          echo "✅ Building target with Scheme: $SCHEME"
+
+          xcodebuild archive \
+            $BUILD_FLAG \
             -scheme "$SCHEME" \
             -archivePath "$HOME/build/ios/xcarchive/App.xcarchive" \
-            -allowProvisioningUpdates \
-            CODE_SIGN_STYLE=Automatic \
-            DEVELOPMENT_TEAM="" \
-            archive
-          # Export the IPA
-          xcodebuild -exportArchive \
-            -archivePath "$HOME/build/ios/xcarchive/App.xcarchive" \
-            -exportPath "$HOME/build/ios/ipa/" \
-            -exportOptionsPlist export_options.plist \
-            -allowProvisioningUpdates
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            PROVISIONING_PROFILE_SPECIFIER=""
+
+      - name: Package Unsigned IPA manually
+        script: |
+          mkdir -p "$HOME/build/ios/ipa/Payload"
+          cp -R "$HOME/build/ios/xcarchive/App.xcarchive/Products/Applications/"*.app "$HOME/build/ios/ipa/Payload/"
+          cd "$HOME/build/ios/ipa"
+          zip -r "PenafortSupermarket-unsigned.ipa" Payload
+          rm -rf Payload
+          echo "✅ Unsigned IPA created successfully."
+
     artifacts:
       - build/ios/ipa/*.ipa
+
     publishing:
       email:
         recipients:
