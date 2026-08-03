@@ -17,36 +17,39 @@ workflows:
           find . -name "*.xcodeproj" -maxdepth 3
       - name: Prepare Podfile and install
         script: |
-          # Ensure Podfile exists with correct target
           if [ ! -f "Podfile" ]; then
-            echo "📄 Creating Podfile..."
             echo 'platform :ios, "14.0"' > Podfile
             echo 'target "Penafort Supermarket" do' >> Podfile
-            echo "  # No dependencies needed" >> Podfile
             echo "end" >> Podfile
           fi
-          # Install pods (even with no dependencies, it creates necessary files)
-          echo "🔄 Running pod install..."
           pod install --verbose
+      - name: Remove problematic entitlements
+        script: |
+          if [ -f "Entitlements.plist" ]; then
+            echo "Removing push and associated domains from Entitlements.plist"
+            /usr/libexec/PlistBuddy -c "Delete :aps-environment" Entitlements.plist 2>/dev/null || true
+            /usr/libexec/PlistBuddy -c "Delete :com.apple.developer.associated-domains" Entitlements.plist 2>/dev/null || true
+            /usr/libexec/PlistBuddy -c "Delete :com.apple.developer.ubiquity-kvstore-identifier" Entitlements.plist 2>/dev/null || true
+            /usr/libexec/PlistBuddy -c "Delete :com.apple.developer.ubiquity-container-identifiers" Entitlements.plist 2>/dev/null || true
+            echo "Entitlements updated:"
+            cat Entitlements.plist
+          else
+            echo "No Entitlements.plist found"
+          fi
       - name: Build IPA
         script: |
-          # Find the workspace
           WORKSPACE_PATH=$(find . -name "*.xcworkspace" -maxdepth 3 | head -1)
           if [ -z "$WORKSPACE_PATH" ]; then
             echo "❌ No .xcworkspace found!"
             exit 1
           fi
           echo "✅ Found workspace: $WORKSPACE_PATH"
-          # Extract the scheme
           SCHEME=$(xcodebuild -list -workspace "$WORKSPACE_PATH" 2>/dev/null | grep -A 1 "Schemes:" | tail -1 | sed 's/^[[:space:]]*//')
           if [ -z "$SCHEME" ]; then
             SCHEME=$(basename "$WORKSPACE_PATH" .xcworkspace)
-            echo "⚠️ No scheme found, using workspace name: $SCHEME"
-          else
-            echo "✅ Found scheme: $SCHEME"
           fi
-          # Create export options plist with development method
-          echo "Creating export options plist..."
+          echo "✅ Found scheme: $SCHEME"
+          # Create export options plist
           echo '<?xml version="1.0" encoding="UTF-8"?>' > export_options.plist
           echo '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' >> export_options.plist
           echo '<plist version="1.0">' >> export_options.plist
@@ -59,14 +62,18 @@ workflows:
           echo '    <dict/>' >> export_options.plist
           echo '</dict>' >> export_options.plist
           echo '</plist>' >> export_options.plist
-          # Build the IPA with archive flags to disable problematic capabilities
+          # Build with flags to completely bypass code signing
           xcode-project build-ipa \
             --workspace "$WORKSPACE_PATH" \
             --scheme "$SCHEME" \
             --export-options-plist export_options.plist \
-            --archive-flags "CODE_SIGN_IDENTITY=iPhone Developer" \
-            --archive-flags "PROVISIONING_PROFILE_SPECIFIER=" \
-            --archive-flags "DEVELOPMENT_TEAM="
+            --archive-flags "CODE_SIGN_IDENTITY=\"iPhone Developer\"" \
+            --archive-flags "CODE_SIGNING_REQUIRED=NO" \
+            --archive-flags "CODE_SIGNING_ALLOWED=NO" \
+            --archive-flags "CODE_SIGN_ALLOW_ANY=YES" \
+            --archive-flags "PROVISIONING_PROFILE_SPECIFIER=\"\"" \
+            --archive-flags "DEVELOPMENT_TEAM=\"\"" \
+            --archive-flags "AD_HOC_CODE_SIGNING_ALLOWED=YES"
     artifacts:
       - build/ios/ipa/*.ipa
     publishing:
