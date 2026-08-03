@@ -1,1 +1,43 @@
-
+workflows:
+  ios-workflow:
+    name: Build iOS IPA
+    max_build_duration: 30
+    environment:
+      xcode: latest
+      cocoapods: default
+      vars:
+        XC_WORKSPACE: "Penafort Supermarket"
+    scripts:
+      - name: List directory contents
+        script: |
+          echo "=== Current directory ==="
+          pwd
+          ls -la
+          echo "=== Looking for workspace ==="
+          find . -name "*.xcworkspace" -maxdepth 3
+          echo "=== Looking for existing Podfile ==="
+          find . -name "Podfile" -maxdepth 3
+      - name: Create fresh Podfile
+        script: |
+          echo "📄 Creating a brand new Podfile (overwriting any existing one)"
+          cat > Podfile << 'EOF'
+          platform :ios, '14.0'
+          target 'Penafort Supermarket' do
+          end
+          EOF
+          echo "✅ Podfile created with content:"
+          cat Podfile
+      - name: Install CocoaPods dependencies
+        script: |
+          pod install --verbose
+      - name: Build IPA file
+        script: |
+          xcode-project build-ipa \
+            --workspace "$XC_WORKSPACE.xcworkspace" \
+            --scheme "$XC_WORKSPACE"
+    artifacts:
+      - build/ios/ipa/*.ipa
+    publishing:
+      email:
+        recipients:
+          - mickevsono@gmail.com
