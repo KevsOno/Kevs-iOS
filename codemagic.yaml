@@ -10,9 +10,9 @@ workflows:
           echo "=== Current directory ==="
           pwd
           ls -la
-          echo "=== All workspaces ==="
+          echo "=== Workspace files ==="
           find . -name "*.xcworkspace" -maxdepth 3
-          echo "=== All projects ==="
+          echo "=== Project files ==="
           find . -name "*.xcodeproj" -maxdepth 3
       - name: Build IPA
         script: |
@@ -23,19 +23,31 @@ workflows:
             exit 1
           fi
           echo "✅ Found workspace: $WORKSPACE_PATH"
-          # Extract the scheme from the workspace
+          # Extract the scheme
           SCHEME=$(xcodebuild -list -workspace "$WORKSPACE_PATH" 2>/dev/null | grep -A 1 "Schemes:" | tail -1 | sed 's/^[[:space:]]*//')
           if [ -z "$SCHEME" ]; then
-            # Fallback: use workspace name (remove .xcworkspace)
             SCHEME=$(basename "$WORKSPACE_PATH" .xcworkspace)
             echo "⚠️ No scheme found, using workspace name: $SCHEME"
           else
             echo "✅ Found scheme: $SCHEME"
           fi
-          # Build the IPA
+          # Create a minimal export options plist
+          echo "Creating export options plist..."
+          cat > export_options.plist << EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>method</key>
+    <string>development</string>
+</dict>
+</plist>
+EOF
+          # Build the IPA with the generated plist
           xcode-project build-ipa \
             --workspace "$WORKSPACE_PATH" \
-            --scheme "$SCHEME"
+            --scheme "$SCHEME" \
+            --export-options-plist export_options.plist
     artifacts:
       - build/ios/ipa/*.ipa
     publishing:
