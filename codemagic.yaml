@@ -6,26 +6,32 @@ workflows:
       xcode: latest
       cocoapods: default
       vars:
-        XC_WORKSPACE: "Penafort Supermarket"   # <-- MATCHES YOUR FILE EXACTLY
+        XC_WORKSPACE: "Penafort Supermarket"
     scripts:
-  - name: Check for Podfile
-    script: |
-      cd src
-      if [ -f "Podfile" ]; then
-        echo "✅ Podfile found!"
-        cat Podfile | head -20
-      else
-        echo "❌ No Podfile found in src directory!"
-        ls -la
-        exit 1
-      fi
-  - name: Install CocoaPods dependencies
-    script: |
-      cd src
-      pod install --verbose
-  - name: Build IPA file
-    script: |
-      cd src
-      xcode-project build-ipa \
-        --workspace "$XC_WORKSPACE.xcworkspace" \
-        --scheme "$XC_WORKSPACE"
+      - name: Check for Podfile
+        script: |
+          cd src
+          if [ -f "Podfile" ]; then
+            echo "✅ Podfile found!"
+            cat Podfile | head -20
+          else
+            echo "❌ No Podfile found in src directory!"
+            ls -la
+            exit 1
+          fi
+      - name: Install CocoaPods dependencies
+        script: |
+          cd src
+          pod install --verbose
+      - name: Build IPA file
+        script: |
+          cd src
+          xcode-project build-ipa \
+            --workspace "$XC_WORKSPACE.xcworkspace" \
+            --scheme "$XC_WORKSPACE"
+    artifacts:
+      - build/ios/ipa/*.ipa
+    publishing:
+      email:
+        recipients:
+          - mickevsono@gmail.com
