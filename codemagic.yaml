@@ -4,7 +4,6 @@ workflows:
     max_build_duration: 30
     environment:
       xcode: latest
-      cocoapods: default
       vars:
         XC_WORKSPACE: "Penafort Supermarket"
     scripts:
@@ -13,23 +12,10 @@ workflows:
           echo "=== Current directory ==="
           pwd
           ls -la
-          echo "=== Looking for workspace ==="
+          echo "=== Workspace files ==="
           find . -name "*.xcworkspace" -maxdepth 3
-          echo "=== Looking for existing Podfile ==="
-          find . -name "Podfile" -maxdepth 3
-      - name: Create fresh Podfile
-        script: |
-          echo "📄 Creating a brand new Podfile (overwriting any existing one)"
-          cat > Podfile << 'EOF'
-          platform :ios, '14.0'
-          target 'Penafort Supermarket' do
-          end
-          EOF
-          echo "✅ Podfile created with content:"
-          cat Podfile
-      - name: Install CocoaPods dependencies
-        script: |
-          pod install --verbose
+          echo "=== Project files ==="
+          find . -name "*.xcodeproj" -maxdepth 3
       - name: Build IPA file
         script: |
           xcode-project build-ipa \
