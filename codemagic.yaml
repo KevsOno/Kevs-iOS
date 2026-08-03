@@ -21,17 +21,16 @@ workflows:
         script: |
           if [ ! -f "Podfile" ]; then
             echo "📄 No Podfile found. Creating a minimal one..."
-            cat > Podfile << EOF
-            platform :ios, '14.0'
-            target 'Penafort Supermarket' do
-              # No special pods – we just need the workspace
-            end
-            EOF
+            echo "platform :ios, '14.0'" > Podfile
+            echo "target 'Penafort Supermarket' do" >> Podfile
+            echo "end" >> Podfile
             echo "✅ Podfile created."
+            cat Podfile
           else
             echo "✅ Podfile found."
-            # Clean up any bad characters (remove BOM if present)
+            # Remove UTF-8 BOM if present
             sed -i '1s/^\xEF\xBB\xBF//' Podfile || true
+            cat Podfile
           fi
       - name: Install CocoaPods dependencies
         script: |
