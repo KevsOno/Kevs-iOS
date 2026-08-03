@@ -23,20 +23,24 @@ workflows:
             echo "end" >> Podfile
           fi
           pod install --verbose
-      - name: Remove problematic entitlements
+      - name: Remove problematic capabilities from project
         script: |
-          if [ -f "Entitlements.plist" ]; then
-            echo "Removing push and associated domains from Entitlements.plist"
-            /usr/libexec/PlistBuddy -c "Delete :aps-environment" Entitlements.plist 2>/dev/null || true
-            /usr/libexec/PlistBuddy -c "Delete :com.apple.developer.associated-domains" Entitlements.plist 2>/dev/null || true
-            /usr/libexec/PlistBuddy -c "Delete :com.apple.developer.ubiquity-kvstore-identifier" Entitlements.plist 2>/dev/null || true
-            /usr/libexec/PlistBuddy -c "Delete :com.apple.developer.ubiquity-container-identifiers" Entitlements.plist 2>/dev/null || true
-            echo "Entitlements updated:"
-            cat Entitlements.plist
+          PROJECT_FILE="Penafort Supermarket.xcodeproj/project.pbxproj"
+          if [ -f "$PROJECT_FILE" ]; then
+            echo "🛠️  Patching $PROJECT_FILE to remove capabilities..."
+            # Remove references to push notifications and associated domains
+            sed -i '' '/com.apple.developer.associated-domains/d' "$PROJECT_FILE"
+            sed -i '' '/aps-environment/d' "$PROJECT_FILE"
+            # Remove the CODE_SIGN_ENTITLEMENTS reference entirely
+            sed -i '' '/CODE_SIGN_ENTITLEMENTS/d' "$PROJECT_FILE"
+            # Also remove any capability setting that might be present
+            sed -i '' '/ENABLE_PUSH_NOTIFICATIONS/d' "$PROJECT_FILE"
+            sed -i '' '/ENABLE_ASSOCIATED_DOMAINS/d' "$PROJECT_FILE"
+            echo "✅ Capabilities removed."
           else
-            echo "No Entitlements.plist found"
+            echo "❌ Project file not found!"
           fi
-      - name: Build IPA
+      - name: Build IPA with xcodebuild
         script: |
           WORKSPACE_PATH=$(find . -name "*.xcworkspace" -maxdepth 3 | head -1)
           if [ -z "$WORKSPACE_PATH" ]; then
@@ -49,7 +53,7 @@ workflows:
             SCHEME=$(basename "$WORKSPACE_PATH" .xcworkspace)
           fi
           echo "✅ Found scheme: $SCHEME"
-          # Create export options plist
+          # Create a minimal export plist
           echo '<?xml version="1.0" encoding="UTF-8"?>' > export_options.plist
           echo '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' >> export_options.plist
           echo '<plist version="1.0">' >> export_options.plist
@@ -57,23 +61,23 @@ workflows:
           echo '    <key>method</key>' >> export_options.plist
           echo '    <string>development</string>' >> export_options.plist
           echo '    <key>signingStyle</key>' >> export_options.plist
-          echo '    <string>manual</string>' >> export_options.plist
-          echo '    <key>provisioningProfiles</key>' >> export_options.plist
-          echo '    <dict/>' >> export_options.plist
+          echo '    <string>automatic</string>' >> export_options.plist
           echo '</dict>' >> export_options.plist
           echo '</plist>' >> export_options.plist
-          # Build with flags to completely bypass code signing
-          xcode-project build-ipa \
-            --workspace "$WORKSPACE_PATH" \
-            --scheme "$SCHEME" \
-            --export-options-plist export_options.plist \
-            --archive-flags "CODE_SIGN_IDENTITY=\"iPhone Developer\"" \
-            --archive-flags "CODE_SIGNING_REQUIRED=NO" \
-            --archive-flags "CODE_SIGNING_ALLOWED=NO" \
-            --archive-flags "CODE_SIGN_ALLOW_ANY=YES" \
-            --archive-flags "PROVISIONING_PROFILE_SPECIFIER=\"\"" \
-            --archive-flags "DEVELOPMENT_TEAM=\"\"" \
-            --archive-flags "AD_HOC_CODE_SIGNING_ALLOWED=YES"
+          # Build the archive (use automatic signing, skip code signing if necessary)
+          xcodebuild -workspace "$WORKSPACE_PATH" \
+            -scheme "$SCHEME" \
+            -archivePath "$HOME/build/ios/xcarchive/App.xcarchive" \
+            -allowProvisioningUpdates \
+            CODE_SIGN_STYLE=Automatic \
+            DEVELOPMENT_TEAM="" \
+            archive
+          # Export the IPA
+          xcodebuild -exportArchive \
+            -archivePath "$HOME/build/ios/xcarchive/App.xcarchive" \
+            -exportPath "$HOME/build/ios/ipa/" \
+            -exportOptionsPlist export_options.plist \
+            -allowProvisioningUpdates
     artifacts:
       - build/ios/ipa/*.ipa
     publishing:
