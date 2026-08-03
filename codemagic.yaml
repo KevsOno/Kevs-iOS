@@ -29,27 +29,34 @@ workflows:
           PROJECT_PATH=$(find . -name "*.xcodeproj" -maxdepth 3 | head -1)
 
           if [ -n "$WORKSPACE_PATH" ]; then
-            BUILD_FLAG="-workspace $WORKSPACE_PATH"
+            echo "Using workspace: $WORKSPACE_PATH"
             SCHEME=$(xcodebuild -list -workspace "$WORKSPACE_PATH" 2>/dev/null | grep -A 1 "Schemes:" | tail -1 | sed 's/^[[:space:]]*//')
+            if [ -z "$SCHEME" ]; then
+              SCHEME="Penafort Supermarket"
+            fi
+            xcodebuild archive \
+              -workspace "$WORKSPACE_PATH" \
+              -scheme "$SCHEME" \
+              -archivePath "$HOME/build/ios/xcarchive/App.xcarchive" \
+              CODE_SIGNING_ALLOWED=NO \
+              CODE_SIGNING_REQUIRED=NO \
+              CODE_SIGN_IDENTITY="" \
+              PROVISIONING_PROFILE_SPECIFIER=""
           else
-            BUILD_FLAG="-project $PROJECT_PATH"
+            echo "Using project: $PROJECT_PATH"
             SCHEME=$(xcodebuild -list -project "$PROJECT_PATH" 2>/dev/null | grep -A 1 "Schemes:" | tail -1 | sed 's/^[[:space:]]*//')
+            if [ -z "$SCHEME" ]; then
+              SCHEME="Penafort Supermarket"
+            fi
+            xcodebuild archive \
+              -project "$PROJECT_PATH" \
+              -scheme "$SCHEME" \
+              -archivePath "$HOME/build/ios/xcarchive/App.xcarchive" \
+              CODE_SIGNING_ALLOWED=NO \
+              CODE_SIGNING_REQUIRED=NO \
+              CODE_SIGN_IDENTITY="" \
+              PROVISIONING_PROFILE_SPECIFIER=""
           fi
-
-          if [ -z "$SCHEME" ]; then
-            SCHEME="Penafort Supermarket"
-          fi
-
-          echo "✅ Building target with Scheme: $SCHEME"
-
-          xcodebuild archive \
-            $BUILD_FLAG \
-            -scheme "$SCHEME" \
-            -archivePath "$HOME/build/ios/xcarchive/App.xcarchive" \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY="" \
-            PROVISIONING_PROFILE_SPECIFIER=""
 
       - name: Package Unsigned IPA manually
         script: |
