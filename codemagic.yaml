@@ -5,7 +5,17 @@ workflows:
     instance_type: mac_mini_m2
     environment:
       xcode: latest
+      cocoapods: default
     scripts:
+      - name: Install CocoaPods dependencies
+        script: |
+          if [ ! -f "Podfile" ]; then
+            echo 'platform :ios, "14.0"' > Podfile
+            echo 'target "Penafort Supermarket" do' >> Podfile
+            echo "end" >> Podfile
+          fi
+          pod install --repo-update
+
       - name: List directory contents
         script: |
           echo "=== Workspace files ==="
