@@ -1,40 +1,43 @@
 workflows:
   ios-workflow:
-    name: Build iOS IPA (No Firebase)
+    name: Build iOS IPA
     max_build_duration: 30
     instance_type: mac_mini_m2
     environment:
       xcode: latest
+      cocoapods: default
     scripts:
-      - name: Remove Firebase imports from source
+      - name: Install CocoaPods (empty Podfile)
         script: |
-          # Comment out Firebase import lines in AppDelegate.swift
-          sed -i '' 's/^import FirebaseCore/\/\/ import FirebaseCore/' "Penafort Supermarket/AppDelegate.swift"
-          sed -i '' 's/^import FirebaseMessaging/\/\/ import FirebaseMessaging/' "Penafort Supermarket/AppDelegate.swift"
-          # Also comment out any Firebase usage (like FirebaseApp.configure())
-          sed -i '' 's/^[[:space:]]*FirebaseApp\.configure()/\/\/ FirebaseApp.configure()/' "Penafort Supermarket/AppDelegate.swift"
-          # Comment out in PushNotifications.swift if present
-          sed -i '' 's/^import FirebaseCore/\/\/ import FirebaseCore/' "Penafort Supermarket/PushNotifications.swift" 2>/dev/null || true
-          sed -i '' 's/^import FirebaseMessaging/\/\/ import FirebaseMessaging/' "Penafort Supermarket/PushNotifications.swift" 2>/dev/null || true
-          echo "✅ Firebase imports commented out."
+          cat > Podfile << 'EOF'
+          platform :ios, '15.0'
+          target 'Penafort Supermarket' do
+          end
+          EOF
+          rm -rf Pods Podfile.lock
+          pod install --repo-update
+
       - name: Build Archive without signing
         script: |
-          PROJECT_PATH=$(find . -name "*.xcodeproj" -maxdepth 3 | head -1)
-          if [ -z "$PROJECT_PATH" ]; then
-            echo "❌ No project found!"
+          WORKSPACE_PATH=$(find . -name "*.xcworkspace" -maxdepth 3 | head -1)
+          if [ -z "$WORKSPACE_PATH" ]; then
+            echo "❌ No workspace found after pod install!"
             exit 1
           fi
-          SCHEME=$(xcodebuild -list -project "$PROJECT_PATH" 2>/dev/null | grep -A 1 "Schemes:" | tail -1 | sed 's/^[[:space:]]*//')
+          SCHEME=$(xcodebuild -list -workspace "$WORKSPACE_PATH" 2>/dev/null | grep -A 1 "Schemes:" | tail -1 | sed 's/^[[:space:]]*//')
           if [ -z "$SCHEME" ]; then
             SCHEME="Penafort Supermarket"
           fi
-          echo "✅ Using project: $PROJECT_PATH, scheme: $SCHEME"
+          echo "✅ Using workspace: $WORKSPACE_PATH, scheme: $SCHEME"
           xcodebuild archive \
-            -project "$PROJECT_PATH" \
+            -workspace "$WORKSPACE_PATH" \
             -scheme "$SCHEME" \
             -archivePath "$HOME/build/ios/xcarchive/App.xcarchive" \
             CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            PROVISIONING_PROFILE_SPECIFIER=""
+
       - name: Package unsigned IPA
         script: |
           mkdir -p "$HOME/build/ios/ipa/Payload"
