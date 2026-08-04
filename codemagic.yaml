@@ -9,10 +9,14 @@ workflows:
     scripts:
       - name: Install CocoaPods dependencies
         script: |
+          # Create a proper Podfile with Firebase
           if [ ! -f "Podfile" ]; then
             echo 'platform :ios, "14.0"' > Podfile
             echo 'target "Penafort Supermarket" do' >> Podfile
-            echo "end" >> Podfile
+            echo '  use_frameworks! :linkage => :static' >> Podfile
+            echo '  pod "FirebaseCore", "~> 11.0"' >> Podfile
+            echo '  pod "FirebaseMessaging", "~> 11.0"' >> Podfile
+            echo 'end' >> Podfile
           fi
           pod install --repo-update
 
@@ -41,7 +45,8 @@ workflows:
               CODE_SIGNING_ALLOWED=NO \
               CODE_SIGNING_REQUIRED=NO \
               CODE_SIGN_IDENTITY="" \
-              PROVISIONING_PROFILE_SPECIFIER=""
+              PROVISIONING_PROFILE_SPECIFIER="" \
+              SWIFT_ENABLE_EXPLICIT_MODULES=NO
           else
             echo "Using project: $PROJECT_PATH"
             SCHEME=$(xcodebuild -list -project "$PROJECT_PATH" 2>/dev/null | grep -A 1 "Schemes:" | tail -1 | sed 's/^[[:space:]]*//')
@@ -55,7 +60,8 @@ workflows:
               CODE_SIGNING_ALLOWED=NO \
               CODE_SIGNING_REQUIRED=NO \
               CODE_SIGN_IDENTITY="" \
-              PROVISIONING_PROFILE_SPECIFIER=""
+              PROVISIONING_PROFILE_SPECIFIER="" \
+              SWIFT_ENABLE_EXPLICIT_MODULES=NO
           fi
 
       - name: Package Unsigned IPA manually
