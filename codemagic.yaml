@@ -20,20 +20,21 @@ workflows:
           fi
           pod install --repo-update
 
-      - name: List directory contents
+      - name: List available workspaces
         script: |
-          echo "=== Workspace files ==="
+          echo "=== Workspace files (after pod install) ==="
           find . -name "*.xcworkspace" -maxdepth 3
           echo "=== Project files ==="
           find . -name "*.xcodeproj" -maxdepth 3
 
       - name: Build Archive without code signing
         script: |
-          WORKSPACE_PATH=$(find . -name "*.xcworkspace" -maxdepth 3 | head -1)
+          # Find the workspace that is NOT inside a .xcodeproj folder
+          WORKSPACE_PATH=$(find . -name "*.xcworkspace" -maxdepth 3 -not -path "*/.xcodeproj/*" | head -1)
           PROJECT_PATH=$(find . -name "*.xcodeproj" -maxdepth 3 | head -1)
 
           if [ -n "$WORKSPACE_PATH" ]; then
-            echo "Using workspace: $WORKSPACE_PATH"
+            echo "✅ Using workspace: $WORKSPACE_PATH"
             SCHEME=$(xcodebuild -list -workspace "$WORKSPACE_PATH" 2>/dev/null | grep -A 1 "Schemes:" | tail -1 | sed 's/^[[:space:]]*//')
             if [ -z "$SCHEME" ]; then
               SCHEME="Penafort Supermarket"
@@ -48,20 +49,25 @@ workflows:
               PROVISIONING_PROFILE_SPECIFIER="" \
               SWIFT_ENABLE_EXPLICIT_MODULES=NO
           else
-            echo "Using project: $PROJECT_PATH"
-            SCHEME=$(xcodebuild -list -project "$PROJECT_PATH" 2>/dev/null | grep -A 1 "Schemes:" | tail -1 | sed 's/^[[:space:]]*//')
-            if [ -z "$SCHEME" ]; then
-              SCHEME="Penafort Supermarket"
+            echo "❌ No workspace found! Falling back to project (may fail)."
+            if [ -n "$PROJECT_PATH" ]; then
+              SCHEME=$(xcodebuild -list -project "$PROJECT_PATH" 2>/dev/null | grep -A 1 "Schemes:" | tail -1 | sed 's/^[[:space:]]*//')
+              if [ -z "$SCHEME" ]; then
+                SCHEME="Penafort Supermarket"
+              fi
+              xcodebuild archive \
+                -project "$PROJECT_PATH" \
+                -scheme "$SCHEME" \
+                -archivePath "$HOME/build/ios/xcarchive/App.xcarchive" \
+                CODE_SIGNING_ALLOWED=NO \
+                CODE_SIGNING_REQUIRED=NO \
+                CODE_SIGN_IDENTITY="" \
+                PROVISIONING_PROFILE_SPECIFIER="" \
+                SWIFT_ENABLE_EXPLICIT_MODULES=NO
+            else
+              echo "❌ No project found either. Exiting."
+              exit 1
             fi
-            xcodebuild archive \
-              -project "$PROJECT_PATH" \
-              -scheme "$SCHEME" \
-              -archivePath "$HOME/build/ios/xcarchive/App.xcarchive" \
-              CODE_SIGNING_ALLOWED=NO \
-              CODE_SIGNING_REQUIRED=NO \
-              CODE_SIGN_IDENTITY="" \
-              PROVISIONING_PROFILE_SPECIFIER="" \
-              SWIFT_ENABLE_EXPLICIT_MODULES=NO
           fi
 
       - name: Package Unsigned IPA manually
